@@ -29,9 +29,9 @@ class StatCache(object):
         if not os.path.isfile(self._latest_stat_of_folder):
             stat_result = os.stat(self._backup_folder)
             cache_data(stat_result, self._latest_stat_of_folder)
-            #TODO: 
-            #  stat whole folder recursively
-            #  and save to self._new_stat_of_whole_folder
+            for f in os.scandir(self._backup_folder):
+                if f.is_dir():
+                    cache_data(os.stat(f), self._new_stat_of_whole_folder)
             return False
         else:
             new_stat_result = os.stat(self._backup_folder)
@@ -40,9 +40,9 @@ class StatCache(object):
                 return False
             else:
                 cache_data(new_stat_result, self._new_stat_of_folder)
-                #TODO: 
-                #  stat whole folder recursively
-                #  and save to self._new_stat_of_whole_folder
+                for f in os.scandir(self._backup_folder):
+                    if f.is_dir():
+                        cache_data(os.stat(f), self._new_stat_of_whole_folder)
                 return True
 
     def update_new_cache(self):
