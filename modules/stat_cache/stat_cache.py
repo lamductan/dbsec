@@ -8,25 +8,20 @@ from utils.utils import make_dirs, cache_data, restore_data
 class StatCache(object):
 	
 	def __init__(self, stat_cache_dir, backup_folder):
-		self._stat_cache_dir = stat_cache_dir
-		self._backup_folder = backup_folder
+		self._stat_cache_dir = stat_cache_dir 	#str, abs path
+		self._backup_folder = backup_folder 	#str, abs path
 
-		#latest folder will hold the stat.dat, which contains the latest info for the root target directory
-		#latest/backup folder will hold the latest info for each file, and will also follow the target directory structure
+		#latest file backup
 		self._latest_stat_cache_dir = os.path.join(stat_cache_dir, "latest")
-		self._latest_stat_of_folder = os.path.join(
-				self._latest_stat_cache_dir, "stat.dat")
-		self._latest_stat_of_whole_folder = os.path.join(
-				self._latest_stat_cache_dir, "backup")
-		make_dirs(self._latest_stat_of_whole_folder)
+		make_dirs(self._latest_stat_cache_dir)
 
-		#similar backup pattern for the new folder
+		#newest file backup; compared to latest
 		self._new_stat_cache_dir = os.path.join(stat_cache_dir, "new")
-		self._new_stat_of_folder = os.path.join(
-				self._new_stat_cache_dir, "stat.dat")
-		self._new_stat_of_whole_folder = os.path.join(
-				self._new_stat_cache_dir, "backup")
-		make_dirs(self._new_stat_of_whole_folder)
+		make_dirs(self._new_stat_cache_dir)
+
+		#root stat file
+		self._root_stat = os.path.join(self._latest_stat_cache_dir,
+			os.path.basename(self._backup_folder) + ".dir")
 
 		self.initialized = True
 
@@ -36,60 +31,65 @@ class StatCache(object):
 			"new": {}
 		}
 
+	def getLocalPath(self, path):
+		# return str(path.path).replace(self._backup_folder, "")[1:]	#drop the leading slash
+		common = os.path.commonpath([path, self._backup_folder])
+		localPath = str(os.path.abspath(path)).replace(common, "")[1:]	#drop the leading slash
+		if localPath == "":
+			return os.path.basename(self._backup_folder)
+		return os.path.join(os.path.basename(self._backup_folder), localPath)
+
+	def getSuffix(self, path):
+		#directory stat files have the following name: <directory_name>.dir
+		#file stat files have the following name: <file_name>.file
+		if os.path.isdir(path):	#is a dir
+			suffix = ".dir"
+		else:				#is a file
+			suffix = ".file"
+		return suffix
+
 	def recursive_file_check(self, path):
 		modified = False
-		localPath = str(path.path).replace(self._backup_folder, "")[1:]	#drop the leading slash
-		print(localPath)
-		if path.is_dir():
-			print("directory")
+
+		localPath = self.getLocalPath(path)
+		suffix = self.getSuffix(path)
+
+		newStatPath = os.path.join(self._new_stat_cache_dir, localPath + suffix)
+		latestStatPath = os.path.join(self._latest_stat_cache_dir, localPath + suffix)
+
+		# print(os.path.basename(latestStatPath))
+
+		if not os.path.isfile(latestStatPath):
+			#stat file does not exist for path, so it must be new
+			# print("DNE")
+			modified = True
+		#stat and write
+		statResult = os.stat(path)
+		cache_data(statResult, newStatPath)
+		#compare to existing stat file, if it exists (not modified yet)
+		if not modified and statResult.st_ctime != restore_data(latestStatPath).st_ctime:
+			# print("DIFF TIME")
+			# print(statResult.st_ctime)
+			print(restore_data(latestStatPath))
+			modified = True
+
+		#if this is a directory, recursively check
+		if os.path.isdir(path):
 			for f in os.scandir(path):
 				file_updated = self.recursive_file_check(f)
 				if not modified and file_updated:
 					modified = True
-		else:
-			print("file")
 		return modified
 
 	def is_backup_folder_modified(self):
 		modified = False
-		if not os.path.isfile(self._latest_stat_of_folder):     #stat.dat does not exist; first time executing program
-			modified = True
-			self.initialized = False
-			stat_result = os.stat(self._backup_folder)
-			cache_data(stat_result, self._latest_stat_of_folder)
-			#TODO: update the metadata using the root folder and recursively scanning the root
-			for f in os.scandir(self._backup_folder):
-				# print(f)
-				self.recursive_file_check(f)
-				# if f.is_dir():
-				#     cache_data(os.stat(f), self._new_stat_of_whole_folder)
+		if not os.path.isfile(self._root_stat):	#first time executing
+			modified = True	#should this be modified? data might not be in cloud yet
+			# self.initialized = False
+			self.recursive_file_check(self._backup_folder)
 		else:
-			self.initialized = True
-			new_stat_result = os.stat(self._backup_folder)
-			old_stat_result = restore_data(self._latest_stat_of_folder)
-
-			#check if root folder is modified
-			if new_stat_result.st_ctime != old_stat_result.st_ctime:
-				cache_data(new_stat_result, self._new_stat_of_folder)	#overwrite the latest version
-				modified = True
-			#TODO: update the metadata using the root folder and recursively scanning the root
-			for f in os.scandir(self._backup_folder):
-				# print(f)
-				file_updated = self.recursive_file_check(f)
-				if not modified and file_updated:
-					modified = True
-			# if new_stat_result.st_ctime == old_stat_result.st_ctime:
-			# 	#root folder was not modified, but need to check individual files
-			# 	for f in os.scandir(self._backup_folder):
-			# 		recursive_file_check(f)
-			# else:
-			# 	cache_data(new_stat_result, self._latest_stat_of_folder)	#overwrite the latest version
-			# 	for f in os.scandir(self._backup_folder):
-			# 		print(f)
-			# 		# if f.is_dir():
-			# 		#     cache_data(os.stat(f), self._new_stat_of_whole_folder)
-			# 	return True
-		print()
+			# self.initialized = True
+			modified = self.recursive_file_check(self._backup_folder)
 		return modified
 
 	def set_metadata(self, data):
@@ -98,6 +98,5 @@ class StatCache(object):
 
 	def update_new_cache(self):
 		if self.initialized:	#we only want to update the latest with the new cache if new cache is present
-			print("moving")
 			shutil.rmtree(self._latest_stat_cache_dir)
 			shutil.move(self._new_stat_cache_dir, self._latest_stat_cache_dir)
