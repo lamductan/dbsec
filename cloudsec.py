@@ -100,6 +100,8 @@ class BackupProgram(object):
             return False
         else:
             print("Backup folder is modified. Upload new backup version")
+            #generate and upload the new metadata
+            #TODO: upload metadata and data
             return True
 
     def upload_new_version(self):
@@ -108,7 +110,10 @@ class BackupProgram(object):
 
 
 def main():
+    #setup AWS credentials
     user = User(os.path.join(HOME_DIRECTORY, ".aws/credentials"))
+    #TODO: pull the metadata from the blockchain
+
     backupProgram = BackupProgram(user)
 
     if not backupProgram.is_already_config():
@@ -119,9 +124,9 @@ def main():
         if backupProgram.is_backup_folder_modified():
             backupProgram.upload_new_version()
         time.sleep(backupProgram.get_time_interval())
-        loop += 1
-        if loop == 5:
-            break
+        # loop += 1
+        # if loop == 5:
+        #     break
 
     print("program ends")
 
