@@ -60,6 +60,14 @@ class User(object):
             return all_chunks_uploaded
 
     def download_file_from_chunks(self, file_name, bucket, object_name):
+        """
+        Download chunks from S3 bucket, assemble them into file
+        :param file_name: path to file that will be downloaded to
+        :param bucket: Bucket to download from
+        :param object_name: directory that chunks are stored in
+        :return: True if all chunks download successfully, False otherwise
+        """
+
         part_num = 0
         all_chunks_downloaded = True
         with open(file_name, "wb") as f:
