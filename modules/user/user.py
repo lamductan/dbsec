@@ -59,7 +59,7 @@ class User(object):
                 chunk_stream.close()
             return all_chunks_uploaded
 
-    def download_file_from_chunks(self, file_name, bucket, object_name):
+    def download_file_from_chunks(self, bucket, object_name, file_name=None):
         """
         Download chunks from S3 bucket, assemble them into file
         :param file_name: path to file that will be downloaded to
@@ -67,6 +67,13 @@ class User(object):
         :param object_name: directory that chunks are stored in
         :return: True if all chunks download successfully, False otherwise
         """
+
+        # if file_name was not specified, use object_name
+        if file_name is None:
+            file_name = object_name
+
+        if not os.path.exists(os.path.dirname(file_name)):
+            os.makedirs(os.path.dirname(file_name))
 
         part_num = 0
         all_chunks_downloaded = True
