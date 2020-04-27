@@ -72,7 +72,7 @@ def split_file(file_path, out_dir, chunk_size=1000000):
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     if not os.path.isdir(out_dir):
-        raise Exception("out_file_path must be a directory")
+        raise Exception("out_dir must be a directory")
 
     delete_chunk_files(out_dir)
 
