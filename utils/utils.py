@@ -49,11 +49,12 @@ def split_file(file_path, out_dir, chunk_size=1000000):
         raise Exception("file_path does not exist")
     if not os.path.isfile(file_path):
         raise Exception("file_path must be a file")
-    if not os.path.isdir(out_dir):
-        raise Exception("out_file_path must be a directory")
 
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
+    if not os.path.isdir(out_dir):
+        raise Exception("out_file_path must be a directory")
+
     with open(file_path, "rb") as f:
         partnum = 0
         while 1:
@@ -76,15 +77,15 @@ def join_chunks(part_dir, out_file_path):
         raise Exception("part_dir does not exist")
     if not os.path.isdir(part_dir):
         raise Exception("part dir must be a directory")
-    if not os.path.isfile(out_file_path):
-        raise Exception("out_file_path must be a file")
 
     if not os.path.exists(os.path.dirname(out_file_path)):
         os.makedirs(os.path.dirname(out_file_path))
+
     with open(out_file_path, "wb") as output:
         partnum = 0
         while(1):
             filename = os.path.join(part_dir, ('part%04d' % partnum))
+            if not os.path.exists(filename):
                 break
             with open(filename, "rb") as f:
                 chunk = f.read()
