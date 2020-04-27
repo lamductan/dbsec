@@ -66,7 +66,7 @@ class User(object):
             while True:
                 with io.BytesIO() as chunk_stream:
                     chunk_name = get_chunk_file_name(part_num)
-                    chunk_object_name = object_name + chunk_name
+                    chunk_object_name = object_name + "/" + chunk_name
                     part_num = part_num + 1
                     try:
                         response = self._client.download_fileobj(
