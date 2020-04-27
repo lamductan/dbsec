@@ -1,6 +1,7 @@
 import os
 import json
 import pickle
+import re
 
 
 def make_dirs(dirname):
@@ -37,9 +38,27 @@ def restore_data(path):
         return data
 
 
+def get_chunk_file_name(part_num):
+    return 'part%04d' % part_num
+
+
+def delete_chunk_files(chunk_dir):
+    """
+    Delete all the chunk files (any file matching the regex) from this provided directory.
+    :param chunk_dir: directory whose chunk files are being deleted
+    :return:
+    """
+    file_list = os.listdir(chunk_dir)
+    for f in file_list:
+        if re.fullmatch(r'^part[0-9][0-9][0-9][0-9]$', f):
+            os.remove(os.path.join(chunk_dir, f))
+
+
 def split_file(file_path, out_dir, chunk_size=1000000):
     """
-    Split a file into chunks of a specific size
+    Split a file into chunks of a specific size, save these chunks
+    to the provided directory, deleting all chunks already stored in
+    the directory.
     :param file_path: path of file to be split
     :param out_dir: directory to save file chunks
     :param chunk_size: size of file chunks in bytes
@@ -55,40 +74,43 @@ def split_file(file_path, out_dir, chunk_size=1000000):
     if not os.path.isdir(out_dir):
         raise Exception("out_file_path must be a directory")
 
+    delete_chunk_files(out_dir)
+
     with open(file_path, "rb") as f:
-        partnum = 0
-        while 1:
+        part_num = 0
+        while True:
             chunk = f.read(chunk_size)
             if not chunk:
                 break
-            filename = os.path.join(out_dir, ('part%04d' % partnum))
+            filename = os.path.join(out_dir, get_chunk_file_name(part_num))
             with open(filename, 'wb') as p:
                 p.write(chunk)
-            partnum = partnum + 1
+            part_num = part_num + 1
 
-def join_chunks(part_dir, out_file_path):
+
+def join_chunks(chunk_dir, out_file_path):
     """
     Join chunks of split file back together to recreate file
-    :param part_dir: directory containing chunks of file
+    :param chunk_dir: directory containing chunks of file
     :param out_file_path: path of file being created
     :return:
     """
-    if not os.path.exists(part_dir):
-        raise Exception("part_dir does not exist")
-    if not os.path.isdir(part_dir):
-        raise Exception("part dir must be a directory")
+    if not os.path.exists(chunk_dir):
+        raise Exception("chunk_dir does not exist")
+    if not os.path.isdir(chunk_dir):
+        raise Exception("chunk_dir must be a directory")
 
     if not os.path.exists(os.path.dirname(out_file_path)):
         os.makedirs(os.path.dirname(out_file_path))
 
     with open(out_file_path, "wb") as output:
-        partnum = 0
-        while(1):
-            filename = os.path.join(part_dir, ('part%04d' % partnum))
+        part_num = 0
+        while True:
+            filename = os.path.join(chunk_dir, get_chunk_file_name(part_num))
             if not os.path.exists(filename):
                 break
             with open(filename, "rb") as f:
                 chunk = f.read()
                 output.write(chunk)
-            partnum = partnum + 1
+            part_num = part_num + 1
 
