@@ -100,7 +100,7 @@ def join_chunks(chunk_dir, out_file_path):
     if not os.path.isdir(chunk_dir):
         raise Exception("chunk_dir must be a directory")
 
-    if not os.path.exists(os.path.dirname(out_file_path)):
+    if os.path.dirname(out_file_path) and not os.path.exists(os.path.dirname(out_file_path)):
         os.makedirs(os.path.dirname(out_file_path))
 
     with open(out_file_path, "wb") as output:
