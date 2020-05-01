@@ -20,11 +20,10 @@ class StatCache(object):
 
 		# root stat file
 		self._root_stat = os.path.join(self._latest_stat_cache_dir,
-									   os.path.basename(self._backup_folder) + ".dir")
+			os.path.basename(self._backup_folder) + ".dir")
 
 		self.initialized = True
 
-		self.metadata = Metadata()
 
 	def getLocalPath(self, path):
 		# return str(path.path).replace(self._backup_folder, "")[1:]	#drop the leading slash
@@ -43,7 +42,7 @@ class StatCache(object):
 			suffix = ".file"
 		return suffix
 
-	def recursive_file_check(self, path):
+	def _recursive_file_check(self, path, list_modified_files, list_unmodified_files):
 		modified = False
 
 		localPath = self.getLocalPath(path)
@@ -68,28 +67,44 @@ class StatCache(object):
 			print(restore_data(latestStatPath))
 			modified = True
 
-		# if this is a directory, recursively check
-		if os.path.isdir(path):
-			for f in os.scandir(path):
-				file_updated = self.recursive_file_check(f)
-				if not modified and file_updated:
-					modified = True
-		elif os.path.isfile(path):
+		if os.path.isfile(path):
 			if modified:
-				self.metadata.update_metadata(path)
+				list_modified_files.append(path)
+			else:
+				list_unmodified_files.append(path)
+
+		else: # if this is a directory, recursively check
+			for f in os.scandir(path):
+				file_updated = self._recursive_file_check(
+						f.path, list_modified_files,
+						list_unmodified_files)
+				if file_updated:
+					modified = True
 
 		return modified
+
+
+	def recursive_file_check(self, path):
+		list_modified_files = []
+		list_unmodified_files = []
+		modified = self._recursive_file_check(
+				path, list_modified_files, list_unmodified_files)
+		return modified, list_modified_files, list_unmodified_files
 
 	def is_backup_folder_modified(self):
 		modified = False
+		list_modified_files = None
+		list_unmodified_files = None
 		if not os.path.isfile(self._root_stat):  # first time executing
 			modified = True  # should this be modified? data might not be in cloud yet
 			# self.initialized = False
-			self.recursive_file_check(self._backup_folder)
+			_, list_modified_files, list_unmodified_files = \
+					self.recursive_file_check(self._backup_folder)
 		else:
 			# self.initialized = True
-			modified = self.recursive_file_check(self._backup_folder)
-		return modified
+			modified, list_modified_files, list_unmodified_files = \
+					self.recursive_file_check(self._backup_folder)
+		return modified, list_modified_files, list_unmodified_files
 
 
 	def set_metadata(self, data):

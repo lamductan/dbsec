@@ -85,7 +85,7 @@ def split_file(file_path, out_dir, chunk_size=1000000):
             filename = os.path.join(out_dir, get_chunk_file_name(part_num))
             with open(filename, 'wb') as p:
                 p.write(chunk)
-            part_num = part_num + 1
+            part_num += 1
 
 
 def join_chunks(chunk_dir, out_file_path):
@@ -113,4 +113,41 @@ def join_chunks(chunk_dir, out_file_path):
                 chunk = f.read()
                 output.write(chunk)
             part_num = part_num + 1
+
+
+def split_file_and_get_hash(file_path, out_dir, chunk_size=1000000):
+    """
+    Split a file into chunks of a specific size, save these chunks
+    to the provided directory, deleting all chunks already stored in
+    the directory, and return list of hashes of all chunks.
+    :param file_path: path of file to be split
+    :param out_dir: directory to save file chunks
+    :param chunk_size: size of file chunks in bytes
+    :return: dictionary, with key is path of chunk 
+        and value is string of hash of this chunk.
+    """
+    if not os.path.exists(file_path):
+        raise Exception("file_path does not exist")
+    if not os.path.isfile(file_path):
+        raise Exception("file_path must be a file")
+
+    make_dirs(out_dir)
+    if not os.path.isdir(out_dir):
+        raise Exception("out_dir must be a directory")
+
+    delete_chunk_files(out_dir)
+    
+    hashes = {}
+    with open(file_path, "rb") as f:
+        part_num = 0
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            filename = os.path.join(out_dir, get_chunk_file_name(part_num))
+            with open(filename, 'wb') as p:
+                p.write(chunk)
+            part_num += 1
+            hashes[filename] = str(hash(chunk))
+    return hashes
 
