@@ -5,7 +5,7 @@ import re
 
 
 def make_dirs(dirname):
-    if not os.path.isdir(dirname):
+    if dirname and not os.path.isdir(dirname):
         os.makedirs(dirname)
 
 def load_json(filepath):
