@@ -63,6 +63,7 @@ class BackupProgram(object):
         self._set_bucket()
         self._set_time_interval()
         self._stat_cache = StatCache(self._stat_cache_dir, self._backup_folder)
+        self._object_db = ObjectDB(self._object_db_path)
         config = {
             "backup_folder": self._backup_folder,
             "bucket": self._bucket,
