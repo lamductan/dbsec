@@ -12,7 +12,7 @@ from utils.utils import get_chunk_file_name
 
 class User(object):
     
-    def __init__(self, aws_credential_path="~/.aws/credentials"):
+    def __init__(self, aws_credential_path=os.path.join("~", ".aws", "credentials")):
         self._aws_credential_path = aws_credential_path
         self._client = boto3.client('s3')
 

@@ -15,7 +15,7 @@ HOME_DIRECTORY = os.path.expanduser("~")
 class BackupProgram(object):
     
     def __init__(self, user):
-        self._PREFIX_PATH = os.path.join(HOME_DIRECTORY, ".aws/.backup_program/")
+        self._PREFIX_PATH = os.path.join(HOME_DIRECTORY, ".aws", ".backup_program")
         self._CONFIG_FILEPATH = os.path.join(self._PREFIX_PATH, "config.json")
         self._VERSION_FILEPATH = os.path.join(self._PREFIX_PATH, "__version__.txt")
         self._user = user

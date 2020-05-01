@@ -8,7 +8,7 @@ from modules.backup_program.backup_program import BackupProgram
 
 def main():
     HOME_DIRECTORY = os.path.expanduser("~")
-    user = User(os.path.join(HOME_DIRECTORY, ".aws/credentials"))
+    user = User(os.path.join(HOME_DIRECTORY, ".aws", "credentials"))
 
     backupProgram = BackupProgram(user)
     backupProgram.run()
