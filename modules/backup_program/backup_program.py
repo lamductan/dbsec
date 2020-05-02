@@ -171,6 +171,8 @@ class BackupProgram(object):
         """
         Ask user to input password, use password and salt to generate control key
         """
+        # NOTE: getpass doesn't seem to work with PyCharm's python console, but it works
+        # in the terminal.
         password = getpass.getpass(prompt="Enter password: ").encode()
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
