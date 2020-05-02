@@ -1,7 +1,13 @@
 import os
 import time
 import shutil
+import getpass
+import base64
+
 from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from modules.user.user import User
 from modules.metadata.metadata import Metadata
@@ -19,8 +25,6 @@ class BackupProgram(object):
         self._PREFIX_PATH = os.path.join(HOME_DIRECTORY, ".aws", ".backup_program")
         self._CONFIG_FILEPATH = os.path.join(self._PREFIX_PATH, "config.json")
         self._VERSION_FILEPATH = os.path.join(self._PREFIX_PATH, "__version__.txt")
-
-        self._KEY_SIZE = 16
 
         self._user = user
         self._backup_folder = None
@@ -43,8 +47,14 @@ class BackupProgram(object):
         self._file_objects_dir = os.path.join(self._PREFIX_PATH, "file_objects")
         make_dirs(self._file_objects_dir)
 
-        self._control_key_dir = os.path.join(self._PREFIX_PATH, "control_key.key")
+        self._control_key_salt_dir = os.path.join(self._PREFIX_PATH, "salt_file")
         self._control_key = None
+        self._salt = None
+
+        self._password_test_file_dir = os.path.join(self._PREFIX_PATH, "password_test")
+        self._password_test_message = b"This message will have been decrypted properly if you " \
+                                      b"entered the correct password."
+
 
     def is_already_config(self):
         if not os.path.isfile(self._CONFIG_FILEPATH):
@@ -55,16 +65,22 @@ class BackupProgram(object):
                 or not "bucket" in config_keys \
                 or not "time_interval" in config_keys:
             return False
-        if not os.path.isfile(self._control_key_dir):
+        if not os.path.isfile(self._control_key_salt_dir):
             return False
+
         print("Backup program is already config")
         self._backup_folder = config["backup_folder"]
         self._bucket = config["bucket"]
         self._time_interval = config["time_interval"]
         self._stat_cache = StatCache(self._stat_cache_dir, self._backup_folder)
         self._object_db = ObjectDB(self._object_db_path)
-        with open(self._control_key_dir, "rb") as f:
-            self._control_key = f.read()
+
+        self._set_salt()
+        while True:
+            self._set_control_key()
+            if self._correct_password_entered():
+                break
+
         return True
 
 
@@ -72,7 +88,9 @@ class BackupProgram(object):
         self._set_backup_folder()
         self._set_bucket()
         self._set_time_interval()
+        self._set_salt()
         self._set_control_key()
+        self._create_password_test_file()
         self._stat_cache = StatCache(self._stat_cache_dir, self._backup_folder)
         self._object_db = ObjectDB(self._object_db_path)
         config = {
@@ -136,15 +154,57 @@ class BackupProgram(object):
                 print("Please input a valid integer number!")
         self._time_interval = time_interval
 
+    def _set_salt(self):
+        """
+`       Set salt value by reading from file if file exists, or generating random value
+        if file does not exist.
+        """
+        if os.path.isfile(self._control_key_salt_dir):
+            with open(self._control_key_salt_dir, "rb") as f:
+               self._salt = f.read()
+        else:
+            self._salt = os.urandom(16)
+            with open(self._control_key_salt_dir, "wb") as f:
+                f.write(self._salt)
+
     def _set_control_key(self):
         """
-        Generates random control key
-        Writes key to file
+        Ask user to input password, use password and salt to generate control key
         """
-        print("4. Generating random control key")
-        self._control_key = Fernet.generate_key()
-        with open(self._control_key_dir, "wb") as f:
-            f.write(self._control_key)
+        password = getpass.getpass(prompt="Enter password: ").encode()
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=self._salt,
+            iterations=100000,
+            backend=default_backend()
+        )
+        self._control_key = base64.urlsafe_b64encode(kdf.derive(password))
+
+    def _create_password_test_file(self):
+        """
+        Create file with newly created control_key. Decrypting this file will be done to determine if
+        correct password has been entered.
+        """
+        fernet = Fernet(self._control_key)
+        token = fernet.encrypt(self._password_test_message)
+        with open(self._password_test_file_dir, "wb") as file:
+            file.write(token)
+
+    def _correct_password_entered(self):
+        """
+        Decrypt the password test file using the control key to see if the control key was derived using
+        the correct password.
+        :return: True if test file was decrypted correctly and password was entered correctly, False otherwise
+        """
+        fernet = Fernet(self._control_key)
+        with open(self._password_test_file_dir, "rb") as file:
+            encrypted_message = file.read()
+            decrypted_message = fernet.decrypt(encrypted_message)
+            if decrypted_message == self._password_test_message:
+                return True
+            else:
+                return False
 
     def get_time_interval(self):
         """
@@ -158,7 +218,7 @@ class BackupProgram(object):
         """
         Check whether backup folder is modified with regard to
         the previous version.
-        return: boolean, True if backup folder was modified, False otherwise.
+        :return: boolean, True if backup folder was modified, False otherwise.
         """
         modified, list_modified_files, list_unmodified_files = \
                 self._stat_cache.is_backup_folder_modified()
@@ -199,28 +259,26 @@ class BackupProgram(object):
                 self.upload_new_metadata(metadata_path)
 
 
-    def encrypt_data_keys(self, data_keys, control_key):
+    def encrypt_data_keys(self, data_keys):
         """
-        Encrypt a list of data keys with the given control key
+        Encrypt a list of data keys with the control key
         :param data_keys: list of data keys to be encrypted with the control key
-        :param control_key: key used to encrypt the data keys
         :return: list of encrypted data keys
         """
-        f = Fernet(control_key)
+        f = Fernet(self._control_key)
         encrypted_keys = []
         for key in data_keys:
             token = f.encrypt(key)
             encrypted_keys.append(token)
         return encrypted_keys
 
-    def decrypt_data_keys(self, encrypted_data_keys, control_key):
+    def decrypt_data_keys(self, encrypted_data_keys):
         """
-        Decrypt a list of encrypted data keys previously encrypted with the provided symmetrical control key
+        Decrypt a list of encrypted data keys previously encrypted with the control key
         :param encrypted_data_keys: list of encrypted data keys to be decrypted with the control key
-        :param control_key: control key to be used to decrypt the data keys
         :return: List of decrypted data keys
         """
-        f = Fernet(control_key)
+        f = Fernet(self._control_key)
         decrypted_keys = []
         for key in encrypted_data_keys:
             original_data_key = f.decrypt(key)
@@ -228,21 +286,17 @@ class BackupProgram(object):
         return decrypted_keys
 
     def _create_new_metadata_of_modified_file(
-            self, filepath, file_ids, data_keys, control_key=None):
+            self, filepath, file_ids, data_keys):
         """
         Create new metadata of a modified file
         :param filepath: path of modified file
         :param file_ids: list integer, ids of file objects 
             which are chunks of this file
         :param data_keys: list string, keys to encrypt/decrypt file objects
-        :param control_key: string, key to encrypt data_keys
         :return
         """
-        if control_key is None:
-            control_key = Fernet.generate_key()
-            # TODO: if no control_key is provided, data keys are inaccessible
 
-        encrypted_data_keys = self.encrypt_data_keys(data_keys, control_key)
+        encrypted_data_keys = self.encrypt_data_keys(data_keys)
 
         relative_path_from_backup_root = os.path.relpath(
                 filepath, self._backup_folder)
@@ -317,7 +371,7 @@ class BackupProgram(object):
                         data_keys.append(data_key)
 
                     new_metadata = self._create_new_metadata_of_modified_file(
-                        filepath, file_ids, data_keys, control_key=None)
+                        filepath, file_ids, data_keys)
                     # For testing only
                     # metadata = restore_data(new_metadata)
                     # print(metadata.file_ids)
