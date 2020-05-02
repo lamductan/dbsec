@@ -5,7 +5,11 @@ import re
 
 
 def make_dirs(dirname):
-    if dirname and not os.path.isdir(dirname):
+    if dirname is None:
+        raise Exception("dirname cannot be None")
+    if os.path.isfile(dirname):
+        raise Exception("dirname cannot be a file")
+    if not os.path.isdir(dirname):
         os.makedirs(dirname)
 
 def load_json(filepath):
