@@ -43,6 +43,8 @@ class BackupProgram(object):
         self._file_objects_dir = os.path.join(self._PREFIX_PATH, "file_objects")
         make_dirs(self._file_objects_dir)
 
+        self._control_key_dir = os.path.join(self._PREFIX_PATH, "control_key.key")
+        self._control_key = None
 
     def is_already_config(self):
         if not os.path.isfile(self._CONFIG_FILEPATH):
@@ -53,12 +55,16 @@ class BackupProgram(object):
                 or not "bucket" in config_keys \
                 or not "time_interval" in config_keys:
             return False
+        if not os.path.isfile(self._control_key_dir):
+            return False
         print("Backup program is already config")
         self._backup_folder = config["backup_folder"]
         self._bucket = config["bucket"]
         self._time_interval = config["time_interval"]
         self._stat_cache = StatCache(self._stat_cache_dir, self._backup_folder)
         self._object_db = ObjectDB(self._object_db_path)
+        with open(self._control_key_dir, "rb") as f:
+            self._control_key = f.read()
         return True
 
 
@@ -66,6 +72,7 @@ class BackupProgram(object):
         self._set_backup_folder()
         self._set_bucket()
         self._set_time_interval()
+        self._set_control_key()
         self._stat_cache = StatCache(self._stat_cache_dir, self._backup_folder)
         self._object_db = ObjectDB(self._object_db_path)
         config = {
@@ -129,6 +136,15 @@ class BackupProgram(object):
                 print("Please input a valid integer number!")
         self._time_interval = time_interval
 
+    def _set_control_key(self):
+        """
+        Generates random control key
+        Writes key to file
+        """
+        print("4. Generating random control key")
+        self._control_key = Fernet.generate_key()
+        with open(self._control_key_dir, "wb") as f:
+            f.write(self._control_key)
 
     def get_time_interval(self):
         """
