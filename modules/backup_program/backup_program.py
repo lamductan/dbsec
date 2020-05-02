@@ -1,6 +1,7 @@
 import os
 import time
 import shutil
+from cryptography.fernet import Fernet
 
 from modules.user.user import User
 from modules.metadata.metadata import Metadata
@@ -182,6 +183,20 @@ class BackupProgram(object):
                 self.upload_new_metadata(metadata_path)
 
 
+    def encrypt_data_keys(self, data_keys, control_key):
+        """
+        Encrypt a list of data keys with the given control key
+        :param data_keys: list of data keys to be encrypted with the control key
+        :param control_key: key used to encrypt the data keys
+        :return: list of encrypted data keys
+        """
+        f = Fernet(control_key)
+        encrypted_keys = []
+        for key in data_keys:
+            token = f.encrypt(key)
+            encrypted_keys.append(token)
+        return encrypted_keys
+
     def _create_new_metadata_of_modified_file(
             self, filepath, file_ids, data_keys, control_key=None):
         """
@@ -193,8 +208,12 @@ class BackupProgram(object):
         :param control_key: string, key to encrypt data_keys
         :return
         """
-        encrypted_data_keys = data_keys
-        #TODO: encrypted_data_keys = encrypt(data_keys, control_key)
+        if control_key is None:
+            control_key = Fernet.generate_key()
+            # TODO: is no control_key is provided, data keys are inaccessible
+
+        encrypted_data_keys = self.encrypt_data_keys(data_keys, control_key)
+
         relative_path_from_backup_root = os.path.relpath(
                 filepath, self._backup_folder)
         metadata = Metadata(relative_path_from_backup_root, file_ids, 
@@ -255,7 +274,7 @@ class BackupProgram(object):
                         file_id = None
                         data_key = None
                         if file_id_and_data_key is None:
-                            data_key = os.urandom(self._KEY_SIZE)
+                            data_key = Fernet.generate_key()
                             file_id = self._object_db.insert(h, data_key)
                             file_id, data_key = (file_id, data_key)
                             file_object_path = os.path.join(self._file_objects_dir,
