@@ -197,6 +197,20 @@ class BackupProgram(object):
             encrypted_keys.append(token)
         return encrypted_keys
 
+    def decrypt_data_keys(self, encrypted_data_keys, control_key):
+        """
+        Decrypt a list of encrypted data keys previously encrypted with the provided symmetrical control key
+        :param encrypted_data_keys: list of encrypted data keys to be decrypted with the control key
+        :param control_key: control key to be used to decrypt the data keys
+        :return: List of decrypted data keys
+        """
+        f = Fernet(control_key)
+        decrypted_keys = []
+        for key in encrypted_data_keys:
+            original_data_key = f.decrypt(key)
+            decrypted_keys.append(original_data_key)
+        return decrypted_keys
+
     def _create_new_metadata_of_modified_file(
             self, filepath, file_ids, data_keys, control_key=None):
         """
@@ -210,7 +224,7 @@ class BackupProgram(object):
         """
         if control_key is None:
             control_key = Fernet.generate_key()
-            # TODO: is no control_key is provided, data keys are inaccessible
+            # TODO: if no control_key is provided, data keys are inaccessible
 
         encrypted_data_keys = self.encrypt_data_keys(data_keys, control_key)
 
