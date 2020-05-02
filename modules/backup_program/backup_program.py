@@ -202,10 +202,15 @@ class BackupProgram(object):
         fernet = Fernet(self._control_key)
         with open(self._password_test_file_dir, "rb") as file:
             encrypted_message = file.read()
-            decrypted_message = fernet.decrypt(encrypted_message)
-            if decrypted_message == self._password_test_message:
-                return True
-            else:
+            try:
+                decrypted_message = fernet.decrypt(encrypted_message)
+                if decrypted_message == self._password_test_message:
+                    return True
+                else:
+                    print("Incorrect Password")
+                    return False
+            except:
+                print("Incorrect Password")
                 return False
 
     def get_time_interval(self):
