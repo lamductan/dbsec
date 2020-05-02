@@ -221,7 +221,10 @@ class BackupProgram(object):
                     relative_path_from_backup_root + ".metadata")
             make_dirs(os.path.dirname(new_version_path))
             shutil.copy(old_version_path, new_version_path)
-            
+
+    def flush_version_to_file(self):
+        with open(self._VERSION_FILEPATH, "w") as f:
+            f.write(str(self._version))
 
     def run(self):
         """
@@ -273,7 +276,7 @@ class BackupProgram(object):
                 self._copy_old_metadata_if_unmodified(list_unmodified_files)
                 self.upload_new_version(new_file_object_paths)
                 self._stat_cache.update_new_cache()
-                
+                self.flush_version_to_file()
             time.sleep(self.get_time_interval())
 
 
