@@ -18,6 +18,9 @@ class BackupProgram(object):
         self._PREFIX_PATH = os.path.join(HOME_DIRECTORY, ".aws", ".backup_program")
         self._CONFIG_FILEPATH = os.path.join(self._PREFIX_PATH, "config.json")
         self._VERSION_FILEPATH = os.path.join(self._PREFIX_PATH, "__version__.txt")
+
+        self._KEY_SIZE = 16
+
         self._user = user
         self._backup_folder = None
         self._bucket = None
@@ -252,8 +255,7 @@ class BackupProgram(object):
                         file_id = None
                         data_key = None
                         if file_id_and_data_key is None:
-                            data_key = ""
-                            #TODO: generate new data key for new chunk file
+                            data_key = os.urandom(self._KEY_SIZE)
                             file_id = self._object_db.insert(h, data_key)
                             file_id, data_key = (file_id, data_key)
                             file_object_path = os.path.join(self._file_objects_dir,
