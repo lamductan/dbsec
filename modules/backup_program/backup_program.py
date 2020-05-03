@@ -362,10 +362,10 @@ class BackupProgram(object):
                             file_object_path = os.path.join(self._file_objects_dir,
                                     str(file_id))
                             #encrypt the chunk, and write it to file_object_path
-                            with open(chunk_path, "rb") as f:
-                                encrypted = symKey(data_key).encrypt(f.read())
-                            with open(file_object_path, "wb") as f:
-                                f.write(encrypted)
+                            encryptFile(data_key, chunk_path, file_object_path)
+
+                            #test decryption
+                            # print(decryptFile(data_key, file_object_path, file_object_path))
 
                             new_file_object_paths.append(file_object_path)
                         else:
