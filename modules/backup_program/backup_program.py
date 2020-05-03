@@ -1,20 +1,19 @@
-import os
-import time
-import shutil
 import getpass
-import base64
+import os
+import shutil
+import signal
+import time
 
-from modules.user.user import User
 from modules.metadata.metadata import Metadata
 from modules.object_db.object_db import ObjectDB
 from modules.stat_cache.stat_cache import StatCache
-from utils.utils import make_dirs, load_json, save_json, restore_data
-from utils.crypto import sha256, setPassword, symKey, genSymKey, encryptFile, decryptFile
+from utils.crypto import sha256, setPassword, symKey, genSymKey, encryptFile
+from utils.utils import make_dirs, load_json, save_json
 
 HOME_DIRECTORY = os.path.expanduser("~")
 
 class BackupProgram(object):
-    
+
     def __init__(self, user, eth):
         self._PREFIX_PATH = os.path.join(HOME_DIRECTORY, ".aws", ".backup_program")
         self._CONFIG_FILEPATH = os.path.join(self._PREFIX_PATH, "config.json")
@@ -316,10 +315,10 @@ class BackupProgram(object):
                     filepath, self._backup_folder)
             new_version_path = os.path.join(
                     self._metadata_dir, "v{}".format(self._version),
-                    relative_path_from_backup_root + ".metadata")
+                relative_path_from_backup_root + ".metadata")
             old_version_path = os.path.join(
-                    self._metadata_dir, "v{}".format(self._version - 1),
-                    relative_path_from_backup_root + ".metadata")
+                self._metadata_dir, "v{}".format(self._version - 1),
+                relative_path_from_backup_root + ".metadata")
             make_dirs(os.path.dirname(new_version_path))
             shutil.copy(old_version_path, new_version_path)
 
@@ -327,14 +326,43 @@ class BackupProgram(object):
         with open(self._VERSION_FILEPATH, "w") as f:
             f.write(str(self._version))
 
+    def retrieve_file_from_file_id(self, path, file_ids, chunk_size=1000000):
+        with open(path, "wb") as f:
+            try:
+                for file_id in file_ids:
+                    file_name = os.path.join(path, 'part%04d' % file_id)
+                    file = self._user.download_file(file_name, self._bucket, file_name)
+                    f.write(file.read(chunk_size))
+            except:
+                return False
+        return True
+
+    def interrupt(signum, frame):
+        print('TIMED OUT!')
+
+    def version_prompt(self):
+        try:
+            version = int(input("Enter a version number:").strip())
+            return version
+        except TypeError as te:
+            print("Invalid integer!")
+            return self._version
+        except:
+            print("Timeout!")
+            return self._version
+
     def run(self):
         """
         Method to run the backup program.
         """
         if not self.is_already_config():
             self.config()
-        
+
+        signal.signal(signal.SIGALRM, self.interrupt)
         while True:
+            signal.alarm(5)
+            self._version = self.version_prompt()
+            signal.alarm(0)
             print("version: ", self._version)
             modified, list_modified_files, list_unmodified_files = self.is_backup_folder_modified()
             print("modified: ", modified)
