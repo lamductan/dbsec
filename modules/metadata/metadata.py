@@ -1,6 +1,5 @@
-import os
-from utils.utils import cache_data
 from utils.crypto import sha256
+from utils.utils import cache_data, restore_data
 
 class Metadata(object):
     def __init__(self, filename, file_ids, encrypted_data_keys, version):
@@ -11,10 +10,13 @@ class Metadata(object):
         self.hash = self.computeHash()
 
     def computeHash(self):
-    	return sha256([self.filename, self.file_ids, self.encrypted_data_keys, self.version])
+        return sha256([self.filename, self.file_ids, self.encrypted_data_keys, self.version])
 
     def getHash(self):
-    	return self.hash
+        return self.hash
 
     def save(self, path):
         cache_data(self, path)
+
+    def read(self, path):
+        restore_data(path)

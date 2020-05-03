@@ -326,15 +326,27 @@ class BackupProgram(object):
         with open(self._VERSION_FILEPATH, "w") as f:
             f.write(str(self._version))
 
-    def retrieve_file_from_file_id(self, path, file_ids, chunk_size=1000000):
-        with open(path, "wb") as f:
-            try:
-                for file_id in file_ids:
+    def retrieve_metadata(self, path, version):
+        relative_path_from_backup_root = os.path.relpath(path, self._backup_folder)
+        metadata_dir = os.path.join(self._metadata_dir, "v{}".format(version))
+        metadata_path = os.path.join(metadata_dir, relative_path_from_backup_root + ".metadata")
+        metadata = Metadata.read(metadata_path)
+        return metadata_dir, metadata
+
+    def retrieve_file_from_metadata(self, path, metadata, chunk_size=1000000):
+
+        try:
+            with open(path, "wb") as f:
+                for file_id in metadata.file_ids:
+                    object_name = os.path.relpath(path, self._PREFIX_PATH)
                     file_name = os.path.join(path, 'part%04d' % file_id)
-                    file = self._user.download_file(file_name, self._bucket, file_name)
+                    file = self._user.download_file(file_name, self._bucket, object_name)
                     f.write(file.read(chunk_size))
-            except:
-                return False
+            # TODO: Compute hash
+            # TODO: pull previous hash
+
+        except:
+            return False
         return True
 
     def interrupt(signum, frame):
@@ -342,7 +354,11 @@ class BackupProgram(object):
 
     def version_prompt(self):
         try:
-            version = int(input("Enter a version number:").strip())
+            prompt = "Enter a version number"
+            if self._version > 1:
+                prompt += "(1-{})".format(self._version)
+            prompt += ": "
+            version = int(input(prompt).strip())
             return version
         except TypeError as te:
             print("Invalid integer!")
@@ -360,9 +376,6 @@ class BackupProgram(object):
 
         signal.signal(signal.SIGALRM, self.interrupt)
         while True:
-            signal.alarm(5)
-            self._version = self.version_prompt()
-            signal.alarm(0)
             print("version: ", self._version)
             modified, list_modified_files, list_unmodified_files = self.is_backup_folder_modified()
             print("modified: ", modified)
@@ -413,9 +426,9 @@ class BackupProgram(object):
                 allHashes = sha256(hashList)
                 print("all hashes:", allHashes)
                 transaction_id = self._eth.upload(allHashes)
-                #save transaction and version
+                # save transaction and version
                 self._object_db.insertHashVer(self._version, transaction_id)
-                #example to pull transaction id
+                # example to pull transaction id
                 # print(self._object_db.queryHashVer(self._version))
 
                 # update metadata of unmodified files
@@ -423,6 +436,24 @@ class BackupProgram(object):
                 self.upload_new_version(new_file_object_paths)
                 self._stat_cache.update_new_cache()
                 self.flush_version_to_file()
+            else:
+                print("Do you want to retrieve backup from a previous version? ")
+                response = input().strip()
+                if response == "n" or response == "N":
+                    time.sleep(self.get_time_interval())
+                    continue
+                elif response != "Y" and response != "Y":
+                    print("Invalid input.")
+                    continue
+                signal.alarm(5)
+                retrieve_version = self.version_prompt()
+                signal.alarm(0)
+                if retrieve_version:
+                    modified, list_modified_files, list_unmodified_files = self.is_backup_folder_modified()
+                    for file_path in list_modified_files + list_unmodified_files:
+                        metadata_dir, metadata = self.retrieve_metadata(file_path, retrieve_version)
+                        self.retrieve_file_from_metadata(metadata_dir, metadata)
+
             time.sleep(self.get_time_interval())
 
 
