@@ -1,6 +1,7 @@
 from web3 import Web3
 import sys
 import time
+import math
 
 #API from infura
 infura_url = "https://ropsten.infura.io/v3/a51ee608e9e944edb0643b1b26a48eb1"
@@ -45,21 +46,11 @@ class Eth(object):
             ),
             self._acc1Key,
         )
-        result = self._w3.eth.sendRawTransaction(signed_txn.rawTransaction)
-        result_hash_str = result.hex()
-        print("transaction id:", result_hash_str)
-        # #get the transaction with this:
-        # #overall transaction
-        # transaction = self._w3.eth.getTransaction(result_hash_str)
-        # #stored data under "input"
-        # storedData = transaction["input"]
-        # #convert to UTF-8 to view; should match submData
-        # print(type(storedData)) #str
-        # print("stored data:", storedData)
-        # print(type(submData))   #bytes
-        # print(submData)
-        # print(storedData == "0x" + submData)    #need to add prefix 0x
-        return result_hash_str
+        txn_hash = self._w3.eth.sendRawTransaction(signed_txn.rawTransaction)
+        txn_hash_str = txn_hash.hex()
+        self._w3.eth.waitForTransactionReceipt(txn_hash_str)
+        print("transaction id:", txn_hash_str)
+        return txn_hash_str
 
 
     def retrieve(self, block_id):
