@@ -31,10 +31,9 @@ class Eth(object):
     def upload(self, hashData):
         """
         Upload the hashData to the blockchain
-        :param hashData: bytes object of hash to upload
+        :param hashData: hex string of hash to upload
         :return: transaction id of the upload
         """
-        submData = hashData.hex()
         signed_txn = self._w3.eth.account.signTransaction(
             dict(
                 nonce = self._w3.eth.getTransactionCount(self._acc1),
@@ -42,7 +41,7 @@ class Eth(object):
                 gas = 100000,
                 to = self._acc2,
                 value = 1234567,
-                data = submData,
+                data = hashData,
             ),
             self._acc1Key,
         )

@@ -32,8 +32,9 @@ class ProgressPercentageUpload(ProgressPercentage):
 
 class ProgressPercentageDownload(ProgressPercentage):
     
-    def __init__(self, client, bucket, filename):
+    def __init__(self, client, bucket, filename, object_name):
         super().__init__()
         self.filename = filename
-        self.size = client.head_object(Bucket=bucket, Key=filename).ContentLength
+        self.size = client.head_object(
+                Bucket=bucket, Key=object_name)["ContentLength"]
 

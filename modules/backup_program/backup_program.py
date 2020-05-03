@@ -7,8 +7,10 @@ import time
 from modules.metadata.metadata import Metadata
 from modules.object_db.object_db import ObjectDB
 from modules.stat_cache.stat_cache import StatCache
-from utils.crypto import sha256, setPassword, symKey, genSymKey, encryptFile
-from utils.utils import make_dirs, load_json, save_json
+from utils.utils import make_dirs, load_json, save_json, restore_data
+from utils.utils import recursive_get_hash_list, get_hash_list_file_objects
+from utils.crypto import sha256, setPassword, symKey, genSymKey
+from utils.crypto import decryptFile, encryptFile
 
 HOME_DIRECTORY = os.path.expanduser("~")
 
@@ -227,7 +229,7 @@ class BackupProgram(object):
         """
         Upload new version of backup if backup folder is modified.
         :param: new_file_object_paths: list of paths of new file_objects
-        :return:
+        :return: string, the path of new metadata
         """
         for file_object_path in new_file_object_paths:
             object_name = os.path.relpath(file_object_path, self._PREFIX_PATH)
@@ -236,6 +238,7 @@ class BackupProgram(object):
         new_metadata_dir = os.path.join(
                 self._metadata_dir, "v{}".format(self._version))
         self.upload_new_metadata(new_metadata_dir)
+        return new_metadata_dir
 
 
     def upload_new_metadata(self, new_metadata_dir):
@@ -300,7 +303,7 @@ class BackupProgram(object):
                 relative_path_from_backup_root + ".metadata")
         make_dirs(os.path.dirname(path))
         metadata.save(path)
-        return path, metadata.getHash()
+        return path
 
 
     def _copy_old_metadata_if_unmodified(self, list_unmodified_files):
@@ -326,30 +329,8 @@ class BackupProgram(object):
         with open(self._VERSION_FILEPATH, "w") as f:
             f.write(str(self._version))
 
-    def retrieve_metadata(self, path, version):
-        relative_path_from_backup_root = os.path.relpath(path, self._backup_folder)
-        metadata_dir = os.path.join(self._metadata_dir, "v{}".format(version))
-        metadata_path = os.path.join(metadata_dir, relative_path_from_backup_root + ".metadata")
-        metadata = Metadata.read(metadata_path)
-        return metadata_dir, metadata
 
-    def retrieve_file_from_metadata(self, path, metadata, chunk_size=1000000):
-
-        try:
-            with open(path, "wb") as f:
-                for file_id in metadata.file_ids:
-                    object_name = os.path.relpath(path, self._PREFIX_PATH)
-                    file_name = os.path.join(path, 'part%04d' % file_id)
-                    file = self._user.download_file(file_name, self._bucket, object_name)
-                    f.write(file.read(chunk_size))
-            # TODO: Compute hash
-            # TODO: pull previous hash
-
-        except:
-            return False
-        return True
-
-    def interrupt(signum, frame):
+    def interrupt(self, signum, frame):
         print('TIMED OUT!')
 
     def version_prompt(self):
@@ -358,7 +339,9 @@ class BackupProgram(object):
             if self._version > 1:
                 prompt += "(1-{})".format(self._version)
             prompt += ": "
-            version = int(input(prompt).strip())
+            # NOTE: for testing
+            version = 1
+            #version = int(input(prompt).strip())
             return version
         except TypeError as te:
             print("Invalid integer!")
@@ -366,6 +349,136 @@ class BackupProgram(object):
         except:
             print("Timeout!")
             return self._version
+
+    def backup_dir_prompt(self):
+        try:
+            prompt = "Enter a directory to save your backup: "
+            # NOTE: for test
+            backup_dir = "../test"
+            #backup_dir = str(input(prompt).strip())
+            backup_dir = os.path.abspath(backup_dir)
+            try:
+                print("your backup_dir: ", backup_dir)
+                make_dirs(backup_dir)
+            except:
+                print("Invalid directory!")
+            return backup_dir
+        except:
+            print("Timeout!")
+
+    def _get_file_object_ids_from_metadata(self, metadata_dir):
+        set_file_object_ids = set()
+        for f in os.listdir(metadata_dir):
+            f = os.path.join(metadata_dir, f)
+            if os.path.isfile(f):
+                metadata = Metadata.read(f)
+                file_ids = metadata.file_ids
+                for file_id in file_ids:
+                    set_file_object_ids.add(file_id)
+            else:
+                set_file_object_ids_in_f = self._get_file_object_ids_from_metadata(f)
+                for file_id in set_file_object_ids_in_f:
+                    set_file_object_ids.add(file_id)
+        return set_file_object_ids
+
+
+    def _retrieve_backup_data_from_file_objects_and_metadata(self,
+            encrypted_file_objects_dir, metadata_dir, backup_data_dir,
+            original_metadata_dir):
+        """
+        Decrypt data keys by control key, then decrypt file objects by data
+        key and join these file objects
+        :param encrypted_file_objects_dir: string, path of directory containing
+            encrypted file objects downloaded from S3
+        :param metadata_dir: string, path of metadata_dir
+        :param backup_data_dir: string, path of folder containing retrieved backup
+            data
+        :param original_metadata_dir: metadata dir in the first call
+            (not recursive)
+        :return
+        """
+        for metadata_path in os.listdir(metadata_dir):
+            metadata_path = os.path.join(metadata_dir, metadata_path)
+            if os.path.isfile(metadata_path):
+                backup_file_path_rel = os.path.relpath(
+                        metadata_path, original_metadata_dir)
+                backup_file_path_rel = backup_file_path_rel[
+                        :backup_file_path_rel.find(".metadata")]
+                metadata = Metadata.read(metadata_path)
+                data_keys = self.decrypt_data_keys(metadata.encrypted_data_keys)
+                backup_file_path = os.path.join(
+                        backup_data_dir, backup_file_path_rel)
+                make_dirs(os.path.dirname(backup_file_path))
+                with open(backup_file_path, "wb") as f:
+                    for file_id, data_key in \
+                            zip(metadata.file_ids, data_keys):
+                        encrypted_file_object_path = os.path.join(
+                                encrypted_file_objects_dir, str(file_id))
+                        chunk = decryptFile(data_key, encrypted_file_object_path)
+                        f.write(chunk)
+            else:
+                self._retrieve_backup_data_from_file_objects_and_metadata(
+                    encrypted_file_objects_dir, metadata_path, backup_data_dir,
+                    original_metadata_dir)
+    
+
+    def retrieve_backup(self):
+        print("Do you want to retrieve backup from a previous version? ")
+        response = input().strip()
+        if response[0].lower() == 'n': 
+            return
+        elif response[0].lower() != 'y': 
+            print("Invalid input.")
+            return
+        signal.alarm(5)
+        retrieve_version = self.version_prompt()
+        signal.alarm(0)
+        signal.alarm(5)
+        backup_dir = self.backup_dir_prompt()
+        signal.alarm(0)
+        if retrieve_version:
+            # Download metadata
+            backup_dir = os.path.join(backup_dir, "v{}".format(retrieve_version))
+            metadata_dir = os.path.join(backup_dir, "metadata/v{}".format(retrieve_version))
+            # NOTE: comment 2 lines below for test
+            #self._user.download_folder(self._bucket,
+            #        "metadata/v{}".format(retrieve_version), backup_dir)
+            
+            # Download encrypted file objects
+            encrypted_file_objects_dir = os.path.join(backup_dir, ".tmp")
+            make_dirs(encrypted_file_objects_dir)
+            set_file_object_ids = self._get_file_object_ids_from_metadata(metadata_dir)
+            print(set_file_object_ids)
+            # NOTE: comment 4 lines below for test
+            #for file_id in set_file_object_ids:
+            #    object_name = "file_objects/{}".format(file_id)
+            #    file_name = os.path.join(encrypted_file_objects_dir, str(file_id))
+            #    self._user.download_file(file_name, self._bucket, object_name)
+            
+            # Compute hash of downloaded files and compare with hash of this version on eth
+            hashes_of_file_objects = get_hash_list_file_objects(
+                    encrypted_file_objects_dir, set_file_object_ids)
+            hashes_of_metadata = recursive_get_hash_list(metadata_dir)
+            hashList = hashes_of_file_objects + hashes_of_metadata
+            allHashes = sha256(hashList).hex()
+            print("all hashes of retrieve backup: ", allHashes)
+            # Get id of transaction corresponding to this version on eth
+            version, txn_hash = self._object_db.queryHashVer(retrieve_version)
+            assert int(version) == retrieve_version
+            print("txn_hash = ", txn_hash)
+            allHashesStoredOnEth = self._eth.retrieve(txn_hash)[2:] #remove 0x prefix
+            print("hash store on eth:             ", allHashesStoredOnEth)
+            if allHashes != allHashesStoredOnEth:
+                print("Backup data at version {} is modified!"
+                        .format(retrieve_version))
+            else:
+                #self.retrieve_file_from_metadata(metadata_dir, metadata)
+                backup_data_dir = os.path.join(backup_dir, "data")
+                original_metadata_dir = metadata_dir
+                self._retrieve_backup_data_from_file_objects_and_metadata(
+                        encrypted_file_objects_dir, metadata_dir, backup_data_dir,
+                        original_metadata_dir)
+
 
     def run(self):
         """
@@ -377,14 +490,14 @@ class BackupProgram(object):
         signal.signal(signal.SIGALRM, self.interrupt)
         while True:
             print("version: ", self._version)
-            modified, list_modified_files, list_unmodified_files = self.is_backup_folder_modified()
+            modified, list_modified_files, list_unmodified_files = \
+                    self.is_backup_folder_modified()
             print("modified: ", modified)
             if modified:
                 self._version += 1
                 # update object_db and metadata of modified files
                 new_file_object_paths = []
-                hashList = []
-                metadata_hashList = []
+                set_file_object_ids = set()
                 for filepath in list_modified_files:
                     print(filepath)
                     chunk_paths_and_hashes = \
@@ -392,7 +505,6 @@ class BackupProgram(object):
                     file_ids = []
                     data_keys = []
                     for chunk_path, h in chunk_paths_and_hashes.items():
-                        hashList.append(h)
                         file_id_and_data_key = self._object_db.query(h)
                         file_id = None
                         data_key = None
@@ -404,60 +516,42 @@ class BackupProgram(object):
                                     str(file_id))
                             #encrypt the chunk, and write it to file_object_path
                             encryptFile(data_key, chunk_path, file_object_path)
-
                             #test decryption
                             # print(decryptFile(data_key, file_object_path, file_object_path))
-
                             new_file_object_paths.append(file_object_path)
                         else:
                             file_id, data_key = file_id_and_data_key
+                        set_file_object_ids.add(file_id)
+
                         file_ids.append(file_id)
                         data_keys.append(data_key)
 
-                    new_metadata, metadata_hash = self._create_new_metadata_of_modified_file(
+                    self._create_new_metadata_of_modified_file(
                         filepath, file_ids, data_keys)
-                    metadata_hashList.append(metadata_hash)
-                    # For testing only
-                    # metadata = restore_data(new_metadata)
-                    # print(metadata.file_ids)
-                    # print(metadata.encrypted_data_keys)
-                hashList += metadata_hashList
-                #hash all hashes, and upload to eth
-                allHashes = sha256(hashList)
-                print("all hashes:", allHashes)
-                transaction_id = self._eth.upload(allHashes)
-                # save transaction and version
-                self._object_db.insertHashVer(self._version, transaction_id)
-                # example to pull transaction id
-                # print(self._object_db.queryHashVer(self._version))
 
                 # update metadata of unmodified files
                 self._copy_old_metadata_if_unmodified(list_unmodified_files)
-                self.upload_new_version(new_file_object_paths)
+                new_metadata_dir = self.upload_new_version(new_file_object_paths)
+                print("new_metadata_dir = ", new_metadata_dir)
                 self._stat_cache.update_new_cache()
+
+                # Compute hash and upload to eth
+                hashes_of_file_objects = get_hash_list_file_objects(
+                        self._file_objects_dir, set_file_object_ids)
+                hashes_of_metadata = recursive_get_hash_list(new_metadata_dir)
+                hashList = hashes_of_file_objects + hashes_of_metadata
+                #hash all hashes, and upload to eth
+                allHashes = sha256(hashList).hex()
+                print("all hashes of new version: ", allHashes)
+                transaction_id = self._eth.upload(allHashes)
+                # save transaction and version
+                self._object_db.insertHashVer(self._version, transaction_id)
+                
                 self.flush_version_to_file()
             else:
-                print("Do you want to retrieve backup from a previous version? ")
-                response = input().strip()
-                if response == "n" or response == "N":
-                    time.sleep(self.get_time_interval())
-                    continue
-                elif response != "Y" and response != "Y":
-                    print("Invalid input.")
-                    continue
-                signal.alarm(5)
-                retrieve_version = self.version_prompt()
-                signal.alarm(0)
-                if retrieve_version:
-                    modified, list_modified_files, list_unmodified_files = self.is_backup_folder_modified()
-                    for file_path in list_modified_files + list_unmodified_files:
-                        metadata_dir, metadata = self.retrieve_metadata(file_path, retrieve_version)
-                        self.retrieve_file_from_metadata(metadata_dir, metadata)
-
-            time.sleep(self.get_time_interval())
-
+                self.retrieve_backup()
+        time.sleep(self.get_time_interval())
 
     def __del__(self):
-        with open(self._VERSION_FILEPATH, "w") as f:
-            f.write(str(self._version))
+        self.flush_version_to_file()
         print("program ends")

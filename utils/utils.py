@@ -154,3 +154,35 @@ def split_file_and_get_hash(file_path, out_dir, chunk_size=1000000):
             hashes[filename] = str(sha256(chunk))
     return hashes
 
+
+def get_hash_list_file_objects(directory, set_file_object_ids):
+    """
+    Compute hash of all file objects in set_file_object_ids
+    :param directory: string, a folder contains file objects
+    :param set_file_object_ids: set of integers, contains list of file_id
+        needed to compute hash
+    :return: list of hashes of all file objects in set_file_object_ids
+    """
+    hashList = []
+    for file_id in set_file_object_ids:
+        filepath = os.path.join(directory, str(file_id))
+        with open(filepath, "rb") as f:
+            hashList.append(sha256(f.read()))
+    return hashList
+   
+def recursive_get_hash_list(directory):
+    """
+    Recursively compute list of hashes of all file in the directory
+    :param directory: string, a folder contains file needed to compute hash
+    :return: list of hashes of all files in directory
+    """
+    hashList = []
+    for path in os.listdir(directory):
+        path = os.path.join(directory, path)
+        if os.path.isfile(path):
+            with open(path, "rb") as f:
+                hashList.append(sha256(f.read()))
+        else:
+            hashListInSubfolder = recursive_get_hash_list(path)
+            hashList += hashListInSubfolder
+    return hashList

@@ -18,5 +18,6 @@ class Metadata(object):
     def save(self, path):
         cache_data(self, path)
 
-    def read(self, path):
-        restore_data(path)
+    @staticmethod
+    def read(path):
+        return restore_data(path)

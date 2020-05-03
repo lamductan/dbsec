@@ -4,11 +4,10 @@ import boto3
 import io
 from botocore.exceptions import ClientError
 
-from utils.progress_percentage import ProgressPercentageUpload, \
-                                      ProgressPercentageDownload
+from utils.progress_percentage import ProgressPercentageUpload
+from utils.progress_percentage import ProgressPercentageDownload
 
-from utils.utils import get_chunk_file_name
-
+from utils.utils import get_chunk_file_name, make_dirs
 
 class User(object):
     
@@ -123,5 +122,14 @@ class User(object):
         self._client.download_file(
                 bucket, object_name, file_name,
                 Callback=ProgressPercentageDownload(
-                    self._client, bucket, object_name))
+                    self._client, bucket, file_name, object_name))
                 
+
+    def download_folder(self, bucket_name, folder_prefix, out_dir):
+        bucket = boto3.resource('s3').Bucket(bucket_name)
+        for file_object in bucket.objects.filter(Prefix=folder_prefix):
+            object_name = file_object.key
+            print(object_name)
+            file_name = os.path.join(out_dir, object_name)
+            make_dirs(os.path.dirname(file_name))
+            self.download_file(file_name, bucket_name, object_name)
