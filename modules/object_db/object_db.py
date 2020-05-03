@@ -26,10 +26,21 @@ class ObjectDB(object):
                                     ); """     
         sql_create_index_on_hash = """ CREATE UNIQUE INDEX index_hash 
                                         ON objects(hash); """
+
+        sql_create_version_table = """ CREATE TABLE IF NOT EXISTS versions (
+                                            version text NOT NULL,
+                                            transaction_id text NOT NULL
+                                    ); """
+        sql_create_index_on_version = """ CREATE UNIQUE INDEX ver_hash ON
+                                        versions(version); """
+
         # create projects table
         create_table(self._c, sql_create_objects_table)
         # create tasks table
         create_index(self._c, sql_create_index_on_hash)
+        #create version table (store transaction id)
+        create_table(self._c, sql_create_version_table)
+        create_index(self._c, sql_create_index_on_version)
 
 
     def insert(self, hash_str, data_key=""):
@@ -42,7 +53,7 @@ class ObjectDB(object):
             self._c.execute("INSERT INTO objects values (?, ?)",
                             (hash_str, data_key))
             return self._c.lastrowid
-        except Error as e:
+        except Exception as e:
             print(e)
 
 
@@ -55,6 +66,31 @@ class ObjectDB(object):
         """
         result = list(self._c.execute("SELECT * FROM objects WHERE hash=?", 
                       (hash_str,)))
+        if len(result) == 1:
+            return result[0]
+
+    def insertHashVer(self, version, transaction_id):
+        """
+        insert a version and transaction id into the table
+        :param version: version of the transaction
+        :param transaction_id: the id of the block with the hashed info
+        :return: integer indicating the last id of the inserted row
+        """
+        try:
+            self._c.execute("INSERT INTO versions values (?, ?)",
+                (version, transaction_id,))
+            return self._c.lastrowid
+        except Exception as e:
+            print(e)
+
+    def queryHashVer(self, version):
+        """
+        query for the transaction id using version number
+        :param version: version of data to query
+        :return: tuple (id, transaction id)
+        """
+        result = list(self._c.execute("SELECT * FROM versions WHERE version=?",
+                    (version,)))
         if len(result) == 1:
             return result[0]
 

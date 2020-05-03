@@ -13,20 +13,19 @@ from modules.user.user import User
 from modules.metadata.metadata import Metadata
 from modules.object_db.object_db import ObjectDB
 from modules.stat_cache.stat_cache import StatCache
-from utils.utils import make_dirs, load_json, save_json, restore_data
-
+from utils.utils import make_dirs, load_json, save_json, restore_data, sha256
 
 HOME_DIRECTORY = os.path.expanduser("~")
 
-
 class BackupProgram(object):
     
-    def __init__(self, user):
+    def __init__(self, user, eth):
         self._PREFIX_PATH = os.path.join(HOME_DIRECTORY, ".aws", ".backup_program")
         self._CONFIG_FILEPATH = os.path.join(self._PREFIX_PATH, "config.json")
         self._VERSION_FILEPATH = os.path.join(self._PREFIX_PATH, "__version__.txt")
 
         self._user = user
+        self._eth = eth
         self._backup_folder = None
         self._bucket = None
         self._time_interval = 10
@@ -313,7 +312,7 @@ class BackupProgram(object):
                 relative_path_from_backup_root + ".metadata")
         make_dirs(os.path.dirname(path))
         metadata.save(path)
-        return path
+        return path, metadata.getHash()
 
 
     def _copy_old_metadata_if_unmodified(self, list_unmodified_files):
@@ -354,6 +353,8 @@ class BackupProgram(object):
                 self._version += 1
                 # update object_db and metadata of modified files
                 new_file_object_paths = []
+                hashList = []
+                metadata_hashList = []
                 for filepath in list_modified_files:
                     print(filepath)
                     chunk_paths_and_hashes = \
@@ -361,6 +362,7 @@ class BackupProgram(object):
                     file_ids = []
                     data_keys = []
                     for chunk_path, h in chunk_paths_and_hashes.items():
+                        hashList.append(h)
                         file_id_and_data_key = self._object_db.query(h)
                         file_id = None
                         data_key = None
@@ -377,12 +379,22 @@ class BackupProgram(object):
                         file_ids.append(file_id)
                         data_keys.append(data_key)
 
-                    new_metadata = self._create_new_metadata_of_modified_file(
+                    new_metadata, metadata_hash = self._create_new_metadata_of_modified_file(
                         filepath, file_ids, data_keys)
+                    metadata_hashList.append(metadata_hash)
                     # For testing only
                     # metadata = restore_data(new_metadata)
                     # print(metadata.file_ids)
                     # print(metadata.encrypted_data_keys)
+                hashList += metadata_hashList
+                #hash all hashes, and upload to eth
+                allHashes = sha256(hashList)
+                print("all hashes:", allHashes)
+                transaction_id = self._eth.upload(allHashes)
+                #save transaction and version
+                self._object_db.insertHashVer(self._version, transaction_id)
+                #example to pull transaction id
+                # print(self._object_db.queryHashVer(self._version))
 
                 # update metadata of unmodified files
                 self._copy_old_metadata_if_unmodified(list_unmodified_files)
