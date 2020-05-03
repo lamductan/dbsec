@@ -61,12 +61,14 @@ class StatCache(object):
 		statResult = os.stat(path)
 		cache_data(statResult, newStatPath)
 		#compare to existing stat file, if it exists (not modified yet)
-		if not modified and statResult.st_ctime != restore_data(latestStatPath).st_ctime \
-				or statResult.st_mtime != restore_data(latestStatPath).st_mtime:
-			# print("DIFF TIME")
-			# print(statResult.st_ctime)
-			print(restore_data(latestStatPath))
-			modified = True
+		if not modified:
+			latestStatResult = restore_data(latestStatPath)
+			if statResult.st_ctime != latestStatResult.st_ctime \
+					or statResult.st_mtime != latestStatResult.st_mtime:
+				# print("DIFF TIME")
+				# print(statResult.st_ctime)
+				# print(latestStatResult)
+				modified = True
 
 		if os.path.isfile(path):
 			if modified:
