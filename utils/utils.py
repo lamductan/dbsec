@@ -4,6 +4,11 @@ import pickle
 import re
 from utils.crypto import sha256
 
+
+def replace_backslashes_with_forward_slashes(path):
+    return path.replace('\\', '/')
+
+
 def make_dirs(dirname):
     if dirname is None:
         raise Exception("dirname cannot be None")

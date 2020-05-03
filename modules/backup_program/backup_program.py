@@ -8,9 +8,11 @@ from modules.metadata.metadata import Metadata
 from modules.object_db.object_db import ObjectDB
 from modules.stat_cache.stat_cache import StatCache
 from utils.utils import make_dirs, load_json, save_json, restore_data
+from utils.utils import replace_backslashes_with_forward_slashes
 from utils.utils import recursive_get_hash_list, get_hash_list_file_objects
 from utils.crypto import sha256, setPassword, symKey, genSymKey
 from utils.crypto import decryptFile, encryptFile
+from utils.crypto import sha256, setPassword, symKey, genSymKey, encryptFile, decryptFile
 
 HOME_DIRECTORY = os.path.expanduser("~")
 
@@ -233,10 +235,12 @@ class BackupProgram(object):
         """
         for file_object_path in new_file_object_paths:
             object_name = os.path.relpath(file_object_path, self._PREFIX_PATH)
+            object_name = replace_backslashes_with_forward_slashes(object_name)
             self._user.upload_file(file_object_path, self._bucket, object_name)
         
         new_metadata_dir = os.path.join(
                 self._metadata_dir, "v{}".format(self._version))
+        make_dirs(new_metadata_dir)
         self.upload_new_metadata(new_metadata_dir)
         return new_metadata_dir
 
@@ -251,6 +255,7 @@ class BackupProgram(object):
             metadata_path = os.path.join(new_metadata_dir, path)
             if os.path.isfile(metadata_path):
                 object_name = os.path.relpath(metadata_path, self._PREFIX_PATH)
+                object_name = replace_backslashes_with_forward_slashes(object_name)
                 self._user.upload_file(metadata_path, self._bucket, object_name)
             else:
                 self.upload_new_metadata(metadata_path)
