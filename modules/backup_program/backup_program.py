@@ -329,10 +329,25 @@ class BackupProgram(object):
                 self._metadata_dir, "v{}".format(self._version - 1),
                 relative_path_from_backup_root + ".metadata")
             make_dirs(os.path.dirname(new_version_path))
-            shutil.copy(old_version_path, new_version_path)
-            file_ids = Metadata.read(new_version_path).file_ids
-            for file_id in file_ids:
-                set_file_ids.add(file_id)
+            if os.path.isfile(old_version_path):
+                # file already exists
+                shutil.copy(old_version_path, new_version_path)
+                file_ids = Metadata.read(new_version_path).file_ids
+                for file_id in file_ids:
+                    set_file_ids.add(file_id)
+            else:
+                # deal with duplicated file: create new metadata for them
+                chunk_paths_and_hashes = \
+                        self._object_db.get_chunk_paths_and_hashes(filepath)
+                file_ids = []
+                data_keys = []
+                for chunk_path, h in chunk_paths_and_hashes.items():
+                    file_id, data_key = self._object_db.query(h)
+                    file_ids.append(file_id)
+                    data_keys.append(data_key)
+                self._create_new_metadata_of_modified_file(
+                    filepath, file_ids, data_keys)
+
         return set_file_ids
 
     def flush_version_to_file(self):
@@ -516,10 +531,8 @@ class BackupProgram(object):
                     file_ids = []
                     data_keys = []
                     for chunk_path, h in chunk_paths_and_hashes.items():
-                        file_id_and_data_key = self._object_db.query(h)
-                        file_id = None
-                        data_key = None
-                        if file_id_and_data_key is None:
+                        file_id, data_key = self._object_db.query(h)
+                        if file_id is None:
                             data_key = genSymKey()
                             #save the key
                             file_id = self._object_db.insert(h, data_key)
@@ -530,12 +543,10 @@ class BackupProgram(object):
                             #test decryption
                             # print(decryptFile(data_key, file_object_path, file_object_path))
                             new_file_object_paths.append(file_object_path)
-                        else:
-                            file_id, data_key = file_id_and_data_key
-                        set_file_object_ids.add(file_id)
 
                         file_ids.append(file_id)
                         data_keys.append(data_key)
+                        set_file_object_ids.add(file_id)
 
                     self._create_new_metadata_of_modified_file(
                         filepath, file_ids, data_keys)
@@ -562,11 +573,11 @@ class BackupProgram(object):
                 # save transaction and version
                 self._object_db.insertHashVer(self._version, transaction_id)
 
-                self.flush_version_to_file()
+                #self.flush_version_to_file()
             else:
                 self.retrieve_backup()
             time.sleep(self.get_time_interval())
 
     def __del__(self):
-        self.flush_version_to_file()
+        #self.flush_version_to_file()
         print("program ends")

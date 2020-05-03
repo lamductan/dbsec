@@ -64,10 +64,13 @@ class ObjectDB(object):
             id: an integer indicating rowid of file,
             data_key: a string indicating data key to enc/dec file object.
         """
-        result = list(self._c.execute("SELECT * FROM objects WHERE hash=?", 
+        result = list(self._c.execute(
+            "SELECT rowid, data_key FROM objects WHERE hash=?", 
                       (hash_str,)))
         if len(result) == 1:
             return result[0]
+        else:
+            return None, None
 
     def insertHashVer(self, version, transaction_id):
         """
