@@ -311,13 +311,14 @@ class BackupProgram(object):
         return path
 
 
-    def _copy_old_metadata_if_unmodified(self, list_unmodified_files):
+    def _copy_old_metadata_and_get_set_file_ids_if_unmodified(self, list_unmodified_files):
         """
         Copy metadata of old version to current version
         :param list_unmodified_files: list of strings, each string is
             a path of an unmodified file
-        :return
+        :return: set of integers, containing file ids of unmodified files
         """
+        set_file_ids = set()
         for filepath in list_unmodified_files:
             relative_path_from_backup_root = os.path.relpath(
                     filepath, self._backup_folder)
@@ -329,6 +330,10 @@ class BackupProgram(object):
                 relative_path_from_backup_root + ".metadata")
             make_dirs(os.path.dirname(new_version_path))
             shutil.copy(old_version_path, new_version_path)
+            file_ids = Metadata.read(new_version_path).file_ids
+            for file_id in file_ids:
+                set_file_ids.add(file_id)
+        return set_file_ids
 
     def flush_version_to_file(self):
         with open(self._VERSION_FILEPATH, "w") as f:
@@ -345,8 +350,7 @@ class BackupProgram(object):
                 prompt += "(1-{})".format(self._version)
             prompt += ": "
             # NOTE: for testing
-            version = 1
-            #version = int(input(prompt).strip())
+            version = int(input(prompt).strip())
             return version
         except TypeError as te:
             print("Invalid integer!")
@@ -474,15 +478,17 @@ class BackupProgram(object):
             allHashesStoredOnEth = self._eth.retrieve(txn_hash)[2:] #remove 0x prefix
             print("hash store on eth:             ", allHashesStoredOnEth)
             if allHashes != allHashesStoredOnEth:
-                print("Backup data at version {} is modified!"
+                print("Backup data on S3 bucket at version {} is modified!"
                         .format(retrieve_version))
             else:
-                #self.retrieve_file_from_metadata(metadata_dir, metadata)
+                print("Retrieving your backup version...")
                 backup_data_dir = os.path.join(backup_dir, "data")
                 original_metadata_dir = metadata_dir
                 self._retrieve_backup_data_from_file_objects_and_metadata(
                         encrypted_file_objects_dir, metadata_dir, backup_data_dir,
                         original_metadata_dir)
+                print("Successfully retrieve your backup at version {}".format(
+                    retrieve_version))
 
 
     def run(self):
@@ -535,12 +541,16 @@ class BackupProgram(object):
                         filepath, file_ids, data_keys)
 
                 # update metadata of unmodified files
-                self._copy_old_metadata_if_unmodified(list_unmodified_files)
+                set_file_ids_of_unmodified_files = \
+                        self._copy_old_metadata_and_get_set_file_ids_if_unmodified( \
+                            list_unmodified_files)
                 new_metadata_dir = self.upload_new_version(new_file_object_paths)
                 print("new_metadata_dir = ", new_metadata_dir)
                 self._stat_cache.update_new_cache()
 
                 # Compute hash and upload to eth
+                for file_id in set_file_ids_of_unmodified_files:
+                    set_file_object_ids.add(file_id)
                 hashes_of_file_objects = get_hash_list_file_objects(
                         self._file_objects_dir, set_file_object_ids)
                 hashes_of_metadata = recursive_get_hash_list(new_metadata_dir)
