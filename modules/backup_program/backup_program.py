@@ -586,11 +586,11 @@ class BackupProgram(object):
                 # save transaction and version
                 self._object_db.insertHashVer(self._version, transaction_id)
 
-                #self.flush_version_to_file()
+                self.flush_version_to_file()
             else:
                 self.retrieve_backup()
             time.sleep(self.get_time_interval())
 
     def __del__(self):
-        #self.flush_version_to_file()
+        self.flush_version_to_file()
         print("program ends")
