@@ -27,6 +27,7 @@ class Eth(object):
             sys.exit(-1)
         self._w3 = Web3(Web3.HTTPProvider(infura_url))
         print("Connected to eth:", self._w3.isConnected())
+        self._transactionCount = self._w3.eth.getTransactionCount(self._acc1)
 
     def upload(self, hashData):
         """
@@ -34,20 +35,33 @@ class Eth(object):
         :param hashData: hex string of hash to upload
         :return: transaction id of the upload
         """
-        signed_txn = self._w3.eth.account.signTransaction(
-            dict(
-                nonce = self._w3.eth.getTransactionCount(self._acc1),
-                gasPrice = self._w3.eth.gasPrice,
-                gas = 100000,
-                to = self._acc2,
-                value = 1234567,
-                data = hashData,
-            ),
-            self._acc1Key,
-        )
-        txn_hash = self._w3.eth.sendRawTransaction(signed_txn.rawTransaction)
-        txn_hash_str = txn_hash.hex()
-        self._w3.eth.waitForTransactionReceipt(txn_hash_str)
+        while True:
+            try:
+                myNonce = max(self._transactionCount, self._w3.eth.getTransactionCount(self._acc1))
+                signed_txn = self._w3.eth.account.signTransaction(
+                    dict(
+                        nonce = myNonce,
+                        gasPrice = self._w3.eth.gasPrice,
+                        gas = 100000,
+                        to = self._acc2,
+                        value = 1234567,
+                        data = hashData,
+                    ),
+                    self._acc1Key,
+                )
+                txn_hash = self._w3.eth.sendRawTransaction(signed_txn.rawTransaction)
+                txn_hash_str = txn_hash.hex()
+                self._transactionCount = myNonce + 1
+                break
+            except:
+                print("eth error, raising nonce")
+                self._transactionCount += 1
+        while True:
+            try:
+                self._w3.eth.waitForTransactionReceipt(txn_hash_str)
+                break
+            except:
+                print("eth timed out, trying again")
         print("transaction id:", txn_hash_str)
         return txn_hash_str
 
