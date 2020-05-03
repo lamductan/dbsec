@@ -7,12 +7,10 @@ import time
 from modules.metadata.metadata import Metadata
 from modules.object_db.object_db import ObjectDB
 from modules.stat_cache.stat_cache import StatCache
-from utils.utils import make_dirs, load_json, save_json, restore_data
-from utils.utils import replace_backslashes_with_forward_slashes
-from utils.utils import recursive_get_hash_list, get_hash_list_file_objects
-from utils.crypto import sha256, setPassword, symKey, genSymKey
-from utils.crypto import decryptFile, encryptFile
 from utils.crypto import sha256, setPassword, symKey, genSymKey, encryptFile, decryptFile
+from utils.utils import make_dirs, load_json, save_json
+from utils.utils import recursive_get_hash_list, get_hash_list_file_objects
+from utils.utils import replace_backslashes_with_forward_slashes
 
 HOME_DIRECTORY = os.path.expanduser("~")
 
@@ -337,6 +335,7 @@ class BackupProgram(object):
 
     def interrupt(self, signum, frame):
         print('TIMED OUT!')
+        raise TimeoutError
 
     def version_prompt(self):
         try:
@@ -350,10 +349,10 @@ class BackupProgram(object):
             return version
         except TypeError as te:
             print("Invalid integer!")
-            return self._version
+            return
         except:
             print("Timeout!")
-            return self._version
+            return
 
     def backup_dir_prompt(self):
         try:
@@ -367,9 +366,11 @@ class BackupProgram(object):
                 make_dirs(backup_dir)
             except:
                 print("Invalid directory!")
+                return
             return backup_dir
         except:
             print("Timeout!")
+            return
 
     def _get_file_object_ids_from_metadata(self, metadata_dir):
         set_file_object_ids = set()
@@ -427,62 +428,88 @@ class BackupProgram(object):
                     original_metadata_dir)
 
     def retrieve_backup(self):
-        signal.alarm(10)
-        response = input("Do you want to retrieve backup from a previous version (y/n)? ").strip()
-        if response[0].lower() == 'n':
+        try:
+            signal.alarm(10)
+            print("Do you want to retrieve backup from a previous version (y/n)?", end=" ", flush=True)
+            response = input().strip()
+            signal.alarm(0)
+            if response[0].lower() == 'n':
+                return
+            elif response[0].lower() != 'y':
+                print("Invalid input.")
+                return
+            print("Retrieving backup")
+            signal.alarm(5)
+            retrieve_version = self.version_prompt()
+            signal.alarm(0)
+            if not retrieve_version:
+                return
+            signal.alarm(5)
+            backup_dir = self.backup_dir_prompt()
+            signal.alarm(0)
+            if not backup_dir:
+                return
+            print("Retrieved backup")
+        except TimeoutError:
             return
-        elif response[0].lower() != 'y':
-            print("Invalid input.")
-            return
-        signal.alarm(0)
-        signal.alarm(5)
-        retrieve_version = self.version_prompt()
-        signal.alarm(0)
-        signal.alarm(5)
-        backup_dir = self.backup_dir_prompt()
-        signal.alarm(0)
-        if retrieve_version:
-            # Download metadata
-            backup_dir = os.path.join(backup_dir, "v{}".format(retrieve_version))
-            metadata_dir = os.path.join(backup_dir, "metadata/v{}".format(retrieve_version))
-            # NOTE: comment 2 lines below for test
-            self._user.download_folder(self._bucket,
-                    "metadata/v{}".format(retrieve_version), backup_dir)
+        except Exception as e:
+            print(f"Error: {e}")
 
-            # Download encrypted file objects
-            encrypted_file_objects_dir = os.path.join(backup_dir, ".tmp")
-            make_dirs(encrypted_file_objects_dir)
-            set_file_object_ids = self._get_file_object_ids_from_metadata(metadata_dir)
-            print(set_file_object_ids)
-            # NOTE: comment 4 lines below for test
-            for file_id in set_file_object_ids:
-                object_name = "file_objects/{}".format(file_id)
-                file_name = os.path.join(encrypted_file_objects_dir, str(file_id))
-                self._user.download_file(file_name, self._bucket, object_name)
+        # Download metadata
+        backup_dir = os.path.join(backup_dir, "v{}".format(retrieve_version))
+        metadata_dir = os.path.join(backup_dir, "metadata/v{}".format(retrieve_version))
 
-            # Compute hash of downloaded files and compare with hash of this version on eth
-            hashes_of_file_objects = get_hash_list_file_objects(
-                    encrypted_file_objects_dir, set_file_object_ids)
-            hashes_of_metadata = recursive_get_hash_list(metadata_dir)
-            hashList = hashes_of_file_objects + hashes_of_metadata
-            allHashes = sha256(hashList).hex()
-            print("all hashes of retrieve backup: ", allHashes)
-            # Get id of transaction corresponding to this version on eth
-            version, txn_hash = self._object_db.queryHashVer(retrieve_version)
-            assert int(version) == retrieve_version
-            print("txn_hash = ", txn_hash)
-            allHashesStoredOnEth = self._eth.retrieve(txn_hash)[2:] #remove 0x prefix
-            print("hash store on eth:             ", allHashesStoredOnEth)
-            if allHashes != allHashesStoredOnEth:
-                print("Backup data at version {} is modified!"
-                        .format(retrieve_version))
-            else:
-                #self.retrieve_file_from_metadata(metadata_dir, metadata)
-                backup_data_dir = os.path.join(backup_dir, "data")
-                original_metadata_dir = metadata_dir
-                self._retrieve_backup_data_from_file_objects_and_metadata(
-                        encrypted_file_objects_dir, metadata_dir, backup_data_dir,
-                        original_metadata_dir)
+        # NOTE: comment 2 lines below for test
+        self._user.download_folder(self._bucket,
+                                   "metadata/v{}".format(retrieve_version), backup_dir)
+
+        # Download encrypted file objects
+        encrypted_file_objects_dir = os.path.join(backup_dir, ".tmp")
+        make_dirs(encrypted_file_objects_dir)
+        set_file_object_ids = self._get_file_object_ids_from_metadata(metadata_dir)
+        print(set_file_object_ids)
+
+        # NOTE: comment 4 lines below for test
+        for file_id in set_file_object_ids:
+            object_name = "file_objects/{}".format(file_id)
+            file_name = os.path.join(encrypted_file_objects_dir, str(file_id))
+            self._user.download_file(file_name, self._bucket, object_name)
+
+        # Download encrypted file objects
+        encrypted_file_objects_dir = os.path.join(backup_dir, ".tmp")
+        make_dirs(encrypted_file_objects_dir)
+        set_file_object_ids = self._get_file_object_ids_from_metadata(metadata_dir)
+        print(set_file_object_ids)
+
+        # NOTE: comment 4 lines below for test
+        for file_id in set_file_object_ids:
+            object_name = "file_objects/{}".format(file_id)
+            file_name = os.path.join(encrypted_file_objects_dir, str(file_id))
+            self._user.download_file(file_name, self._bucket, object_name)
+
+        # Compute hash of downloaded files and compare with hash of this version on eth
+        hashes_of_file_objects = get_hash_list_file_objects(
+            encrypted_file_objects_dir, set_file_object_ids)
+        hashes_of_metadata = recursive_get_hash_list(metadata_dir)
+        hashList = hashes_of_file_objects + hashes_of_metadata
+        allHashes = sha256(hashList).hex()
+        print("all hashes of retrieve backup: ", allHashes)
+        # Get id of transaction corresponding to this version on eth
+        version, txn_hash = self._object_db.queryHashVer(retrieve_version)
+        assert int(version) == retrieve_version
+        print("txn_hash = ", txn_hash)
+        allHashesStoredOnEth = self._eth.retrieve(txn_hash)[2:]  # remove 0x prefix
+        print("hash store on eth:             ", allHashesStoredOnEth)
+        if allHashes != allHashesStoredOnEth:
+            print("Backup data at version {} is modified!"
+                  .format(retrieve_version))
+        else:
+            # self.retrieve_file_from_metadata(metadata_dir, metadata)
+            backup_data_dir = os.path.join(backup_dir, "data")
+            original_metadata_dir = metadata_dir
+            self._retrieve_backup_data_from_file_objects_and_metadata(
+                encrypted_file_objects_dir, metadata_dir, backup_data_dir,
+                original_metadata_dir)
 
 
     def run(self):
