@@ -2,8 +2,7 @@ import os
 import json
 import pickle
 import re
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
+from utils.crypto import sha256
 
 def make_dirs(dirname):
     if dirname is None:
@@ -119,24 +118,6 @@ def join_chunks(chunk_dir, out_file_path):
                 output.write(chunk)
             part_num = part_num + 1
 
-
-def sha256(data):
-    """
-    Method to provide consistent hashing functionality using SHA256
-    :param data: data to be hashed; can be a list
-    :return: hash of data
-    """
-    my_sha256 = hashes.Hash(hashes.SHA256(), backend=default_backend())
-    if isinstance(data, list):
-        for d in data:
-            try:
-                my_sha256.update(bytes(str(d), "utf-8"))
-            except (TypeError):
-                print("invalid type")
-    else:
-        my_sha256.update(bytes(str(data), "utf-8"))
-    return my_sha256.finalize()
-
 def split_file_and_get_hash(file_path, out_dir, chunk_size=1000000):
     """
     Split a file into chunks of a specific size, save these chunks
@@ -170,7 +151,6 @@ def split_file_and_get_hash(file_path, out_dir, chunk_size=1000000):
             with open(filename, 'wb') as p:
                 p.write(chunk)
             part_num += 1
-            # hashes[filename] = str(hash(chunk))
             hashes[filename] = str(sha256(chunk))
     return hashes
 

@@ -4,16 +4,12 @@ import shutil
 import getpass
 import base64
 
-from cryptography.fernet import Fernet
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-
 from modules.user.user import User
 from modules.metadata.metadata import Metadata
 from modules.object_db.object_db import ObjectDB
 from modules.stat_cache.stat_cache import StatCache
-from utils.utils import make_dirs, load_json, save_json, restore_data, sha256
+from utils.utils import make_dirs, load_json, save_json, restore_data
+from utils.crypto import sha256, setPassword, symKey, genSymKey, encryptFile, decryptFile
 
 HOME_DIRECTORY = os.path.expanduser("~")
 
@@ -173,21 +169,14 @@ class BackupProgram(object):
         # NOTE: getpass doesn't seem to work with PyCharm's python console, but it works
         # in the terminal.
         password = getpass.getpass(prompt="Enter password: ").encode()
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=self._salt,
-            iterations=100000,
-            backend=default_backend()
-        )
-        self._control_key = base64.urlsafe_b64encode(kdf.derive(password))
+        self._control_key = setPassword(password, self._salt)
 
     def _create_password_test_file(self):
         """
         Create file with newly created control_key. Decrypting this file will be done to determine if
         correct password has been entered.
         """
-        fernet = Fernet(self._control_key)
+        fernet = symKey(self._control_key)
         token = fernet.encrypt(self._password_test_message)
         with open(self._password_test_file_dir, "wb") as file:
             file.write(token)
@@ -198,7 +187,7 @@ class BackupProgram(object):
         the correct password.
         :return: True if test file was decrypted correctly and password was entered correctly, False otherwise
         """
-        fernet = Fernet(self._control_key)
+        fernet = symKey(self._control_key)
         with open(self._password_test_file_dir, "rb") as file:
             encrypted_message = file.read()
             try:
@@ -271,7 +260,7 @@ class BackupProgram(object):
         :param data_keys: list of data keys to be encrypted with the control key
         :return: list of encrypted data keys
         """
-        f = Fernet(self._control_key)
+        f = symKey(self._control_key)
         encrypted_keys = []
         for key in data_keys:
             token = f.encrypt(key)
@@ -284,7 +273,7 @@ class BackupProgram(object):
         :param encrypted_data_keys: list of encrypted data keys to be decrypted with the control key
         :return: List of decrypted data keys
         """
-        f = Fernet(self._control_key)
+        f = symKey(self._control_key)
         decrypted_keys = []
         for key in encrypted_data_keys:
             original_data_key = f.decrypt(key)
@@ -367,12 +356,17 @@ class BackupProgram(object):
                         file_id = None
                         data_key = None
                         if file_id_and_data_key is None:
-                            data_key = Fernet.generate_key()
+                            data_key = genSymKey()
+                            #save the key
                             file_id = self._object_db.insert(h, data_key)
-                            file_id, data_key = (file_id, data_key)
                             file_object_path = os.path.join(self._file_objects_dir,
                                     str(file_id))
-                            shutil.move(chunk_path, file_object_path)
+                            #encrypt the chunk, and write it to file_object_path
+                            encryptFile(data_key, chunk_path, file_object_path)
+
+                            #test decryption
+                            # print(decryptFile(data_key, file_object_path, file_object_path))
+
                             new_file_object_paths.append(file_object_path)
                         else:
                             file_id, data_key = file_id_and_data_key

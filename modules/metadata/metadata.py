@@ -1,5 +1,6 @@
 import os
-from utils.utils import cache_data, sha256
+from utils.utils import cache_data
+from utils.crypto import sha256
 
 class Metadata(object):
     def __init__(self, filename, file_ids, encrypted_data_keys, version):
