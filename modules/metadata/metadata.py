@@ -15,6 +15,6 @@ class Metadata(object):
 
     def getHash(self):
     	return self.hash
-         
+
     def save(self, path):
         cache_data(self, path)
