@@ -54,4 +54,13 @@ class Eth(object):
 
 
     def retrieve(self, block_id):
-        pass
+        """
+        Retrieve the stored data from the blockchain
+        :param block_id: transaction id
+        :return: what was stored at the blockchain as input (the hash)
+        """
+        transaction = self._w3.eth.getTransaction(block_id)
+        storedHash = transaction["input"]   #this is a string with 0x as the prefix
+        #TODO: compare this with the computed hash of a retrieved version
+        print("stored hash:", storedHash)
+        return storedHash
