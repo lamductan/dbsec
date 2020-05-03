@@ -446,8 +446,8 @@ class BackupProgram(object):
             backup_dir = os.path.join(backup_dir, "v{}".format(retrieve_version))
             metadata_dir = os.path.join(backup_dir, "metadata/v{}".format(retrieve_version))
             # NOTE: comment 2 lines below for test
-            #self._user.download_folder(self._bucket,
-            #        "metadata/v{}".format(retrieve_version), backup_dir)
+            self._user.download_folder(self._bucket,
+                    "metadata/v{}".format(retrieve_version), backup_dir)
 
             # Download encrypted file objects
             encrypted_file_objects_dir = os.path.join(backup_dir, ".tmp")
@@ -455,10 +455,10 @@ class BackupProgram(object):
             set_file_object_ids = self._get_file_object_ids_from_metadata(metadata_dir)
             print(set_file_object_ids)
             # NOTE: comment 4 lines below for test
-            #for file_id in set_file_object_ids:
-            #    object_name = "file_objects/{}".format(file_id)
-            #    file_name = os.path.join(encrypted_file_objects_dir, str(file_id))
-            #    self._user.download_file(file_name, self._bucket, object_name)
+            for file_id in set_file_object_ids:
+                object_name = "file_objects/{}".format(file_id)
+                file_name = os.path.join(encrypted_file_objects_dir, str(file_id))
+                self._user.download_file(file_name, self._bucket, object_name)
 
             # Compute hash of downloaded files and compare with hash of this version on eth
             hashes_of_file_objects = get_hash_list_file_objects(
