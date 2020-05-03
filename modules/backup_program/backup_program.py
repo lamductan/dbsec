@@ -7,10 +7,10 @@ import time
 from modules.metadata.metadata import Metadata
 from modules.object_db.object_db import ObjectDB
 from modules.stat_cache.stat_cache import StatCache
-from utils.utils import make_dirs, load_json, save_json, restore_data
-from utils.utils import recursive_get_hash_list, get_hash_list_file_objects
-from utils.crypto import sha256, setPassword, symKey, genSymKey
 from utils.crypto import decryptFile, encryptFile
+from utils.crypto import sha256, setPassword, symKey, genSymKey
+from utils.utils import make_dirs, load_json, save_json
+from utils.utils import recursive_get_hash_list, get_hash_list_file_objects
 
 HOME_DIRECTORY = os.path.expanduser("~")
 
@@ -420,16 +420,16 @@ class BackupProgram(object):
                 self._retrieve_backup_data_from_file_objects_and_metadata(
                     encrypted_file_objects_dir, metadata_path, backup_data_dir,
                     original_metadata_dir)
-    
 
     def retrieve_backup(self):
-        print("Do you want to retrieve backup from a previous version? ")
-        response = input().strip()
-        if response[0].lower() == 'n': 
+        signal.alarm(10)
+        response = input("Do you want to retrieve backup from a previous version (y/n)? ").strip()
+        if response[0].lower() == 'n':
             return
-        elif response[0].lower() != 'y': 
+        elif response[0].lower() != 'y':
             print("Invalid input.")
             return
+        signal.alarm(0)
         signal.alarm(5)
         retrieve_version = self.version_prompt()
         signal.alarm(0)
@@ -443,7 +443,7 @@ class BackupProgram(object):
             # NOTE: comment 2 lines below for test
             #self._user.download_folder(self._bucket,
             #        "metadata/v{}".format(retrieve_version), backup_dir)
-            
+
             # Download encrypted file objects
             encrypted_file_objects_dir = os.path.join(backup_dir, ".tmp")
             make_dirs(encrypted_file_objects_dir)
@@ -454,7 +454,7 @@ class BackupProgram(object):
             #    object_name = "file_objects/{}".format(file_id)
             #    file_name = os.path.join(encrypted_file_objects_dir, str(file_id))
             #    self._user.download_file(file_name, self._bucket, object_name)
-            
+
             # Compute hash of downloaded files and compare with hash of this version on eth
             hashes_of_file_objects = get_hash_list_file_objects(
                     encrypted_file_objects_dir, set_file_object_ids)
@@ -546,11 +546,11 @@ class BackupProgram(object):
                 transaction_id = self._eth.upload(allHashes)
                 # save transaction and version
                 self._object_db.insertHashVer(self._version, transaction_id)
-                
+
                 self.flush_version_to_file()
             else:
                 self.retrieve_backup()
-        time.sleep(self.get_time_interval())
+            time.sleep(self.get_time_interval())
 
     def __del__(self):
         self.flush_version_to_file()
