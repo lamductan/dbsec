@@ -236,6 +236,7 @@ class BackupProgram(object):
         
         new_metadata_dir = os.path.join(
                 self._metadata_dir, "v{}".format(self._version))
+        make_dirs(new_metadata_dir)
         self.upload_new_metadata(new_metadata_dir)
 
 
